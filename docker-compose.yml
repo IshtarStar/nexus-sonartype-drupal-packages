@@ -1,0 +1,63 @@
+services:
+  nexus:
+    image: sonatype/nexus3:3.96.3
+    ports:
+      - "127.0.0.1:${NEXUS_PORT:-8081}:8081"
+    environment:
+      INSTALL4J_ADD_VM_PARAMS: >-
+        -Xms512m -Xmx1536m -XX:MaxDirectMemorySize=1024m
+        -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+    volumes:
+      - nexus-data:/nexus-data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/service/rest/v1/status"]
+      interval: 5s
+      timeout: 4s
+      start_period: 60s
+      retries: 48
+    stop_grace_period: 1m
+
+  metadata:
+    image: python:3.13-alpine
+    # Der Adapter ist für Nexus über Loopback erreichbar, auch nach einem Neustart.
+    network_mode: "service:nexus"
+    user: "65534:65534"
+    volumes:
+      - ./packagist_metadata_proxy.py:/app/packagist_metadata_proxy.py:ro
+    command: ["python", "-u", "/app/packagist_metadata_proxy.py", "--host", "127.0.0.1", "--port", "18097"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 18097), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  bootstrap:
+    image: python:3.13-alpine
+    user: "200:200"
+    depends_on:
+      nexus:
+        condition: service_healthy
+      metadata:
+        condition: service_healthy
+    environment:
+      NEXUS_URL: http://nexus:8081
+      PACKAGIST_REMOTE_URL: http://127.0.0.1:18097/
+      NEXUS_ACCEPT_EULA: "${NEXUS_ACCEPT_EULA:-false}"
+    volumes:
+      - nexus-data:/nexus-data:ro
+      - ./docker/configure_nexus.py:/app/configure_nexus.py:ro
+    command: ["python", "-u", "/app/configure_nexus.py"]
+
+  composer-test:
+    profiles: ["test"]
+    build:
+      context: ./docker
+      dockerfile: composer.Dockerfile
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      NEXUS_GROUP_URL: http://nexus:8081/repository/composer-group/
+
+volumes:
+  nexus-data:

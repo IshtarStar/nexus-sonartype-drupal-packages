@@ -1,0 +1,22 @@
+{
+  "name": "example/nexus-composer-demo",
+  "description": "Testprojekt für Packagist- und Drupal-Pakete über dieselbe Nexus-Gruppe",
+  "type": "project",
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "http://127.0.0.1:18096/repository/composer-test-expanded/"
+    },
+    {
+      "packagist.org": false
+    }
+  ],
+  "config": {
+    "secure-http": false,
+    "allow-plugins": false
+  },
+  "require": {
+    "psr/log": "^3.0",
+    "drupal/nbsp": "^3.1"
+  }
+}
